@@ -5,7 +5,7 @@
   "name": "Portal Tier Tagger",
   "description": "Displays players' Portal PvP tiers (HT1-LT5) with gamemode icons above their heads, in tab and in chat. Pulls live data from the Portal rankings API.",
   "authors": [
-    "PRIYESH SINGH"
+    "Blaze</>.exe"
   ],
   "contact": {
     "homepage": "https://portal-production-5ec6.up.railway.app"
