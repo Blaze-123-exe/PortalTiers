@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "portaltiertagger",
+  "version": "${version}",
+  "name": "Portal Tier Tagger",
+  "description": "Displays players' Portal PvP tiers (HT1-LT5) with gamemode icons above their heads, in tab and in chat. Pulls live data from the Portal rankings API.",
+  "authors": [
+    "PRIYESH SINGH"
+  ],
+  "contact": {
+    "homepage": "https://portal-production-5ec6.up.railway.app"
+  },
+  "license": "MIT",
+  "icon": "assets/portaltiertagger/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.portaltiers.tagger.PortalTierTaggerClient"
+    ],
+    "modmenu": [
+      "com.portaltiers.tagger.gui.ModMenuIntegration"
+    ]
+  },
+  "mixins": [
+    "portaltiertagger.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.5",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "portaltiertagger.config.title": "Portal Tier Tagger",
+  "portaltiertagger.config.enabled": "Mod Enabled",
+  "portaltiertagger.config.showIcons": "Show Gamemode Icons",
+  "portaltiertagger.config.showInNametag": "Show Above Nametags",
+  "portaltiertagger.config.showInTab": "Show In Tab List",
+  "portaltiertagger.config.showInChat": "Show In Chat",
+  "portaltiertagger.config.gamemode": "Gamemode",
+  "portaltiertagger.config.highestMode": "Highest Tier Mode",
+  "portaltiertagger.config.showOverall": "Show Overall Tier",
+  "portaltiertagger.config.refresh": "Refresh Interval (min)",
+  "portaltiertagger.config.bracket": "Use Brackets",
+  "portaltiertagger.config.done": "Done",
+  "portaltiertagger.keybind.cycle": "Cycle Gamemode",
+  "portaltiertagger.keybind.category": "Portal Tier Tagger",
+  "key.categories.portaltiertagger": "Portal Tier Tagger"
+}
