@@ -1,3 +1,4 @@
+<img width="1600" height="720" alt="Screenshot_20260627_112158" src="https://github.com/user-attachments/assets/4712b90b-f37f-4b2a-8e8b-9cd0d7cad87e" />
 # Portal Tier Tagger
 
 A client-side Fabric mod for **Minecraft 1.21.1** that displays players' **Portal**
