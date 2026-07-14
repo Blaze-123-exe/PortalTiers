@@ -1,11 +1,10 @@
-package com.portaltiers.tagger;  // package kept as-is to avoid breaking other files
+package com.portaltiers.tagger;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.portaltiers.tagger.config.PortalConfig;    // You may rename this later to PojavConfig
+import com.portaltiers.tagger.config.PortalConfig;
 import com.portaltiers.tagger.model.GameMode;
 import com.portaltiers.tagger.model.PlayerRanking;
 import com.portaltiers.tagger.util.Http;
@@ -20,7 +19,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -30,15 +28,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Central state for Pojav Tier Tagger: fetches and caches the overall leaderboard
+ * Central state for Pojav Tier Tagger: fetches the overall leaderboard
  * from the PojavTiers API and builds coloured tier badges.
  */
-public final class PojavTierManager {   // Class renamed
+public final class PortalTierManager {   // class name kept as original
 
     public static final Logger LOGGER = LoggerFactory.getLogger("PojavTierTagger");
-    public static final Identifier ICON_FONT = Identifier.of("pojavtiertagger", "icons");
-
-    private static final Gson GSON = new Gson();
+    public static final Identifier ICON_FONT = Identifier.of("portaltiertagger", "icons");
 
     /** The fixed API endpoint – returns the overall leaderboard with best_tier for every player. */
     private static final String API_URL = "http://78.154.103.17:14264/api/overall";
@@ -59,7 +55,7 @@ public final class PojavTierManager {   // Class renamed
     private static volatile long lastAttemptMillis = 0L;
     private static volatile int failureStreak = 0;
 
-    private PojavTierManager() {}
+    private PortalTierManager() {}
 
     public record DisplayedTier(GameMode mode, String tierCode) {}
 
@@ -69,7 +65,7 @@ public final class PojavTierManager {   // Class renamed
 
     public static void maybeRefresh() {
         long now = System.currentTimeMillis();
-        int intervalMin = Math.max(1, PortalConfig.get().refreshIntervalMinutes); // config still uses old name
+        int intervalMin = Math.max(1, PortalConfig.get().refreshIntervalMinutes);
         long wait = loaded ? intervalMin * 60_000L : 60_000L;
         if (now - lastAttemptMillis >= wait) {
             refreshNow();
@@ -82,7 +78,7 @@ public final class PojavTierManager {   // Class renamed
 
         EXEC.submit(() -> {
             try {
-                String body = Http.get(API_URL);   // hardcoded new URL
+                String body = Http.get(API_URL);
                 ingest(body);
                 failureStreak = 0;
             } catch (Exception e) {
@@ -122,15 +118,11 @@ public final class PojavTierManager {   // Class renamed
                 String ign = getJsonString(obj, "ign");
                 if (ign == null || ign.equalsIgnoreCase("unknown")) continue;
 
-                // Build a PlayerRanking from the fields we now have.
-                // Note: PlayerRanking model needs to be adapted (see below).
                 PlayerRanking pr = new PlayerRanking();
-                pr.minecraftUsername = ign;                    // keep old field name for compatibility
-                pr.bestTier = getJsonString(obj, "best_tier"); // new field – add to PlayerRanking
-                pr.points = getJsonInt(obj, "points");
+                pr.minecraftUsername = ign;                       // keep old field name
+                pr.bestTier = getJsonString(obj, "best_tier");    // new field added to model
+                pr.points = getJsonInt(obj, "points");           // new field
                 pr.region = getJsonString(obj, "region");
-                // The overall endpoint doesn't provide per‑gamemode tiers, so ranks stays null.
-                // If you need per‑gamemode data later, you'll call /api/tiers/<ign> on demand.
 
                 String key = ign.toLowerCase(Locale.ROOT);
                 next.put(key, pr);
@@ -178,30 +170,21 @@ public final class PojavTierManager {   // Class renamed
         return CACHE.get(username.toLowerCase(Locale.ROOT));
     }
 
-    /**
-     * Now returns the player's best tier directly from the API (no gamemode selection).
-     * The previous gamemode selection logic is removed because the overall API
-     * does not include per‑gamemode data.
-     */
+    /** Now returns the player's single best tier directly from the API. */
     public static DisplayedTier resolve(String username) {
         PlayerRanking pr = lookup(username);
         if (pr == null || pr.bestTier == null) return null;
 
-        // We don't know which gamemode the best tier belongs to, so use a generic placeholder.
-        // You can set a default GameMode (e.g., SWORD) or leave the mode null and adapt buildBadge.
-        GameMode genericMode = GameMode.fromKey("overall"); // might need a new "OVERALL" mode in GameMode enum
-        if (genericMode == null) genericMode = GameMode.UHC; // fallback
-        return new DisplayedTier(genericMode, pr.bestTier);
+        // Use the OVERALL gamemode as a generic placeholder for the icon
+        GameMode mode = GameMode.OVERALL;
+        return new DisplayedTier(mode, pr.bestTier);
     }
 
-    // The old highest() and tierValue() are no longer needed, but kept for reference.
-    // If you still want to support per‑gamemode data, you'd fetch /api/tiers/<ign> separately.
-
-    /** Points awarded for a tier code (updated to match PojavTiers points). */
+    /** Points awarded for a tier code (updated to PojavTiers scoring). */
     public static int tierPoints(String tier) {
         if (tier == null) return 0;
         return switch (tier.toUpperCase(Locale.ROOT)) {
-            case "HT1" -> 100;  // New Pojav scoring
+            case "HT1" -> 100;
             case "LT1" -> 90;
             case "HT2" -> 80;
             case "LT2" -> 70;
@@ -216,7 +199,7 @@ public final class PojavTierManager {   // Class renamed
     }
 
     // ------------------------------------------------------------------
-    // Text building
+    // Text building (unchanged except for Pojav branding in log/chat)
     // ------------------------------------------------------------------
 
     public static MutableText buildBadge(DisplayedTier dt) {
@@ -224,7 +207,6 @@ public final class PojavTierManager {   // Class renamed
         MutableText badge = Text.empty();
 
         if (cfg.showIcons) {
-            // Icon may now represent the best tier overall; you can keep the gamemode icon or use a generic one.
             badge.append(Text.literal(String.valueOf(dt.mode().iconChar()))
                     .setStyle(Style.EMPTY.withFont(ICON_FONT).withColor(dt.mode().iconColor())));
             badge.append(Text.literal(" "));
@@ -247,7 +229,7 @@ public final class PojavTierManager {   // Class renamed
     }
 
     // ------------------------------------------------------------------
-    // Chat deep replacement (unchanged, but uses updated resolve)
+    // Chat deep replacement (unchanged)
     // ------------------------------------------------------------------
 
     private static Set<String> onlineNames() {
