@@ -3,12 +3,16 @@ package com.portaltiers.tagger.model;
 import java.util.Locale;
 
 /**
- * The 8 PvP gamemodes supported by the Portal tier system.
+ * The supported PvP gamemodes (plus a fallback “OVERALL” mode for when only a
+ * best tier is known without a specific gamemode).
  * <p>
  * {@code apiKey} matches the keys used in the {@code ranks} object returned by
- * {@code /api/rankings} (matched case-insensitively).
- * {@code iconChar} is the private-use unicode codepoint mapped to the gamemode
- * emoji in {@code assets/portaltiertagger/font/icons.json}.
+ * the old Portal API and the new PojavTiers per‑player endpoint. The
+ * {@code OVERALL} mode is not a real gamemode; it’s used internally to display
+ * the player’s single best tier badge.
+ * <p>
+ * {@code iconChar} is a private‑use unicode codepoint mapped to a gamemode
+ * emoji texture in {@code assets/portaltiertagger/font/icons.json}.
  * {@code iconColor} is the default tint applied to that icon.
  */
 public enum GameMode {
@@ -19,7 +23,10 @@ public enum GameMode {
     VANILLA("Vanilla", "Vanilla", '\uE004', 0xFF55FF),
     NETHOP("NethOP", "Neth OP", '\uE005', 0x7D4A40),
     UHC("UHC", "UHC", '\uE006', 0xFF5555),
-    AXE("Axe", "Axe", '\uE007', 0x55FF55);
+    AXE("Axe", "Axe", '\uE007', 0x55FF55),
+
+    /** Generic fallback when only a best tier is known (no specific gamemode). */
+    OVERALL("Overall", "Overall", '\uE008', 0xFFFFFF);
 
     private final String apiKey;
     private final String displayName;
@@ -55,7 +62,7 @@ public enum GameMode {
         return all[(this.ordinal() + 1) % all.length];
     }
 
-    /** Resolves a gamemode by its API key or enum name (case-insensitive). */
+    /** Resolves a gamemode by its API key or enum name (case‑insensitive). */
     public static GameMode fromKey(String key) {
         if (key == null) return null;
         String k = key.trim();
@@ -72,6 +79,7 @@ public enum GameMode {
             }
         }
         if (lower.equals("nethpot") || lower.equals("netheritepot") || lower.equals("nethop")) return NETHOP;
+        if (lower.equals("overall")) return OVERALL;   // <-- new fallback
         return null;
     }
 }
