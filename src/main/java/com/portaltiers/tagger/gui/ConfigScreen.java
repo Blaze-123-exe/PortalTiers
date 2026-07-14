@@ -17,7 +17,7 @@ public class ConfigScreen extends Screen {
     private final PortalConfig cfg = PortalConfig.get();
 
     public ConfigScreen(Screen parent) {
-        super(Text.translatable("portaltiertagger.config.title"));
+        super(Text.literal("Pojav Tier Tagger Config"));   // changed title
         this.parent = parent;
     }
 
