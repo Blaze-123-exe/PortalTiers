@@ -14,21 +14,18 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Persistent client configuration, stored at
- * {@code config/portaltiertagger.json}.
+ * Persistent client configuration for Pojav Tier Tagger.
+ * Stored at {@code config/pojavtiertagger.json} (the old portal config is
+ * superseded; delete it manually if you like).
  */
-public class PortalConfig {
+public class PortalConfig {   // class name kept as-is
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path PATH =
-            FabricLoader.getInstance().getConfigDir().resolve("portaltiertagger.json");
+            FabricLoader.getInstance().getConfigDir().resolve("pojavtiertagger.json");
 
-    /** How the "highest tier" fallback behaves. */
     public enum HighestMode {
-        /** Only ever show the selected gamemode's tier. */
         NEVER,
-        /** Show the highest tier only if the player has no tier in the selected gamemode. */
         IF_NONE,
-        /** Always show the player's single highest tier across all gamemodes. */
         ALWAYS
     }
 
@@ -40,13 +37,10 @@ public class PortalConfig {
     public boolean showInChat = true;
     public boolean useBrackets = false;
 
-    // --- behaviour ---
+    // --- behaviour (currently ignored – the API now returns only best_tier) ---
     public GameMode gamemode = GameMode.SWORD;
     public HighestMode highestMode = HighestMode.IF_NONE;
     public int refreshIntervalMinutes = 30;
-
-    // --- network ---
-    public String apiUrl = "https://portal-production-5ec6.up.railway.app/api/rankings";
 
     // --- separator between the tier badge and the name ---
     public String separator = " | ";
@@ -56,16 +50,16 @@ public class PortalConfig {
 
     public static Map<String, Integer> defaultColors() {
         Map<String, Integer> m = new LinkedHashMap<>();
-        m.put("HT1", 0xFFFF55); // Gold / Yellow
-        m.put("HT2", 0xFF7070); // Light Red
-        m.put("HT3", 0xFF55FF); // Light Purple
-        m.put("HT4", 0x55FFFF); // Aqua
-        m.put("HT5", 0x00AA00); // Dark Green
-        m.put("LT1", 0x55FF55); // Green
-        m.put("LT2", 0x5555FF); // Blue
-        m.put("LT3", 0x0000AA); // Dark Blue
-        m.put("LT4", 0xAAAAAA); // Gray
-        m.put("LT5", 0x555555); // Dark Gray
+        m.put("HT1", 0xFFFF55);
+        m.put("HT2", 0xFF7070);
+        m.put("HT3", 0xFF55FF);
+        m.put("HT4", 0x55FFFF);
+        m.put("HT5", 0x00AA00);
+        m.put("LT1", 0x55FF55);
+        m.put("LT2", 0x5555FF);
+        m.put("LT3", 0x0000AA);
+        m.put("LT4", 0xAAAAAA);
+        m.put("LT5", 0x555555);
         return m;
     }
 
@@ -96,16 +90,11 @@ public class PortalConfig {
                         }
                         if (cfg.gamemode == null) cfg.gamemode = GameMode.SWORD;
                         if (cfg.highestMode == null) cfg.highestMode = HighestMode.IF_NONE;
-                        if (cfg.apiUrl == null || cfg.apiUrl.isBlank()) {
-                            cfg.apiUrl = "https://portal-production-5ec6.up.railway.app/api/rankings";
-                        }
                         return cfg;
                     }
                 }
             }
-        } catch (Exception e) {
-            // fall through to defaults on any parse error
-        }
+        } catch (Exception e) { }
         PortalConfig cfg = new PortalConfig();
         cfg.save();
         return cfg;
@@ -118,8 +107,6 @@ public class PortalConfig {
             try (Writer writer = Files.newBufferedWriter(PATH)) {
                 GSON.toJson(this, writer);
             }
-        } catch (IOException e) {
-            // ignore write failures; config is non-critical
-        }
+        } catch (IOException e) { }
     }
 }
