@@ -27,26 +27,19 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * Central state for Pojav Tier Tagger: fetches the overall leaderboard
- * from the PojavTiers API and builds coloured tier badges.
- */
-public final class PortalTierManager {   // class name kept as original
+public final class PortalTierManager {
 
     public static final Logger LOGGER = LoggerFactory.getLogger("PojavTierTagger");
     public static final Identifier ICON_FONT = Identifier.of("portaltiertagger", "icons");
 
-    /** The fixed API endpoint – returns the overall leaderboard with best_tier for every player. */
     private static final String API_URL = "http://78.154.103.17:14264/api/overall";
 
-    /** Single daemon thread for blocking HTTP, so we never spam the network or block the game. */
     private static final ExecutorService EXEC = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "PojavTierTagger-fetch");
         t.setDaemon(true);
         return t;
     });
 
-    /** username (lowercase) -> ranking */
     private static final Map<String, PlayerRanking> CACHE = new ConcurrentHashMap<>();
     private static final AtomicBoolean fetching = new AtomicBoolean(false);
 
@@ -107,7 +100,6 @@ public final class PortalTierManager {   // class name kept as original
 
     private static void ingest(String body) {
         try {
-            // Parse the new JSON: {"total":..., "players":[...]}
             JsonObject root = JsonParser.parseString(body).getAsJsonObject();
             JsonArray playersArray = root.getAsJsonArray("players");
             if (playersArray == null) return;
@@ -119,9 +111,9 @@ public final class PortalTierManager {   // class name kept as original
                 if (ign == null || ign.equalsIgnoreCase("unknown")) continue;
 
                 PlayerRanking pr = new PlayerRanking();
-                pr.minecraftUsername = ign;                       // keep old field name
-                pr.bestTier = getJsonString(obj, "best_tier");    // new field added to model
-                pr.points = getJsonInt(obj, "points");           // new field
+                pr.minecraftUsername = ign;
+                pr.bestTier = getJsonString(obj, "best_tier");
+                pr.points = getJsonInt(obj, "points");
                 pr.region = getJsonString(obj, "region");
 
                 String key = ign.toLowerCase(Locale.ROOT);
@@ -170,17 +162,17 @@ public final class PortalTierManager {   // class name kept as original
         return CACHE.get(username.toLowerCase(Locale.ROOT));
     }
 
-    /** Now returns the player's single best tier directly from the API. */
+    /** Returns the player's single best tier with a default gamemode icon. */
     public static DisplayedTier resolve(String username) {
         PlayerRanking pr = lookup(username);
         if (pr == null || pr.bestTier == null) return null;
 
-        // Use the OVERALL gamemode as a generic placeholder for the icon
-        GameMode mode = GameMode.OVERALL;
+        // Use SWORD as the default icon – no need for a new OVERALL mode.
+        GameMode mode = GameMode.SWORD;   // <-- fallback to an existing gamemode
         return new DisplayedTier(mode, pr.bestTier);
     }
 
-    /** Points awarded for a tier code (updated to PojavTiers scoring). */
+    /** Points awarded for a tier code (PojavTiers scoring). */
     public static int tierPoints(String tier) {
         if (tier == null) return 0;
         return switch (tier.toUpperCase(Locale.ROOT)) {
@@ -199,7 +191,7 @@ public final class PortalTierManager {   // class name kept as original
     }
 
     // ------------------------------------------------------------------
-    // Text building (unchanged except for Pojav branding in log/chat)
+    // Text building
     // ------------------------------------------------------------------
 
     public static MutableText buildBadge(DisplayedTier dt) {
@@ -229,7 +221,7 @@ public final class PortalTierManager {   // class name kept as original
     }
 
     // ------------------------------------------------------------------
-    // Chat deep replacement (unchanged)
+    // Chat deep replacement
     // ------------------------------------------------------------------
 
     private static Set<String> onlineNames() {
