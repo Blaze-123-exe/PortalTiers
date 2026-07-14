@@ -20,17 +20,14 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import org.lwjgl.glfw.GLFW;
 
-import java.util.Map;
-
 public class PortalTierTaggerClient implements ClientModInitializer {
     public static final String MOD_ID = "portaltiertagger";
     private static KeyBinding cycleKey;
 
     @Override
     public void onInitializeClient() {
-        PortalConfig.get(); // load config eagerly
+        PortalConfig.get(); // load config
 
-        // keybind to cycle the displayed gamemode
         cycleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "portaltiertagger.keybind.cycle",
                 InputUtil.Type.KEYSYM,
@@ -38,7 +35,6 @@ public class PortalTierTaggerClient implements ClientModInitializer {
                 "key.categories.portaltiertagger"
         ));
 
-        // refresh when joining a server / world, then periodically
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> PortalTierManager.refreshNow());
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
@@ -48,7 +44,7 @@ public class PortalTierTaggerClient implements ClientModInitializer {
                 PortalConfig.get().save();
                 if (client.player != null) {
                     client.player.sendMessage(
-                            Text.literal("[Portal] Gamemode: ").formatted(Formatting.GRAY)
+                            Text.literal("[Pojav] Gamemode: ").formatted(Formatting.GRAY)
                                     .append(Text.literal(next.displayName()).formatted(Formatting.AQUA)),
                             true);
                 }
@@ -85,31 +81,27 @@ public class PortalTierTaggerClient implements ClientModInitializer {
         };
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
-                dispatcher.register(ClientCommandManager.literal("portaltier")
-                        // /portaltier  -> toggle on/off
+                dispatcher.register(ClientCommandManager.literal("pojavtier")
                         .executes(ctx -> {
                             PortalConfig cfg = PortalConfig.get();
                             cfg.enabled = !cfg.enabled;
                             cfg.save();
-                            feedback(ctx.getSource(), Text.literal("[Portal] Tags " +
+                            feedback(ctx.getSource(), Text.literal("[Pojav] Tags " +
                                     (cfg.enabled ? "enabled" : "disabled"))
                                     .formatted(cfg.enabled ? Formatting.GREEN : Formatting.RED));
                             return 1;
                         })
-                        // /portaltier refresh
                         .then(ClientCommandManager.literal("refresh").executes(ctx -> {
                             PortalTierManager.refreshNow();
-                            feedback(ctx.getSource(), Text.literal("[Portal] Refreshing rankings...")
+                            feedback(ctx.getSource(), Text.literal("[Pojav] Refreshing rankings...")
                                     .formatted(Formatting.YELLOW));
                             return 1;
                         }))
-                        // /portaltier config
                         .then(ClientCommandManager.literal("config").executes(ctx -> {
                             MinecraftClient mc = MinecraftClient.getInstance();
                             mc.execute(() -> mc.setScreen(new ConfigScreen(null)));
                             return 1;
                         }))
-                        // /portaltier gamemode <mode>
                         .then(ClientCommandManager.literal("gamemode")
                                 .then(ClientCommandManager.argument("mode", StringArgumentType.word())
                                         .suggests(gamemodeSuggestions)
@@ -117,17 +109,16 @@ public class PortalTierTaggerClient implements ClientModInitializer {
                                             String arg = StringArgumentType.getString(ctx, "mode");
                                             GameMode mode = GameMode.fromKey(arg);
                                             if (mode == null) {
-                                                feedback(ctx.getSource(), Text.literal("[Portal] Unknown gamemode: " + arg)
+                                                feedback(ctx.getSource(), Text.literal("[Pojav] Unknown gamemode: " + arg)
                                                         .formatted(Formatting.RED));
                                                 return 0;
                                             }
                                             PortalConfig.get().gamemode = mode;
                                             PortalConfig.get().save();
-                                            feedback(ctx.getSource(), Text.literal("[Portal] Gamemode set to " + mode.displayName())
+                                            feedback(ctx.getSource(), Text.literal("[Pojav] Gamemode set to " + mode.displayName())
                                                     .formatted(Formatting.GREEN));
                                             return 1;
                                         })))
-                        // /portaltier player <name>
                         .then(ClientCommandManager.literal("player")
                                 .then(ClientCommandManager.argument("name", StringArgumentType.word())
                                         .suggests(playerSuggestions)
@@ -145,27 +136,20 @@ public class PortalTierTaggerClient implements ClientModInitializer {
     private static Text printPlayerInfo(String name) {
         PlayerRanking pr = PortalTierManager.lookup(name);
         if (pr == null) {
-            return Text.literal("[Portal] No data for " + name + " (try /portaltier refresh)")
+            return Text.literal("[Pojav] No data for " + name + " (try /pojavtier refresh)")
                     .formatted(Formatting.RED);
         }
-        if (!pr.hasAnyTier()) {
-            return Text.literal("[Portal] " + pr.minecraftUsername + " has no tiers.")
-                    .formatted(Formatting.GRAY);
-        }
-        var text = Text.literal("=== Portal tiers for " + pr.minecraftUsername + " ===")
+        Text text = Text.literal("=== Pojav tiers for " + pr.minecraftUsername + " ===")
                 .formatted(Formatting.GOLD);
-        for (Map.Entry<String, String> e : pr.ranks.entrySet()) {
-            GameMode mode = GameMode.fromKey(e.getKey());
-            String label = mode != null ? mode.displayName() : e.getKey();
-            int color = PortalConfig.get().getTierColor(e.getValue());
-            text.append(Text.literal("\n" + label + ": ").formatted(Formatting.GRAY))
-                    .append(Text.literal(e.getValue()).styled(s -> s.withColor(color)));
+        if (pr.bestTier != null) {
+            int color = PortalConfig.get().getTierColor(pr.bestTier);
+            text.append(Text.literal("\nBest Tier: ").formatted(Formatting.GRAY))
+                    .append(Text.literal(pr.bestTier).styled(s -> s.withColor(color)));
         }
+        text.append(Text.literal("\nPoints: ").formatted(Formatting.GRAY))
+                .append(Text.literal(String.valueOf(pr.points)).formatted(Formatting.WHITE));
         text.append(Text.literal("\nRegion: ").formatted(Formatting.GRAY))
                 .append(Text.literal(pr.region == null ? "?" : pr.region).formatted(Formatting.WHITE));
-        text.append(Text.literal("\nOverall: ").formatted(Formatting.GRAY))
-                .append(Text.literal((pr.overallTier == null ? "?" : pr.overallTier)
-                        + " (" + pr.overallPoints + " pts)").formatted(Formatting.WHITE));
         return text;
     }
 }
