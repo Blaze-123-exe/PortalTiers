@@ -4,31 +4,45 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * One entry from the Portal rankings API ({@code /api/rankings}).
+ * One player entry from the PojavTiers API.
  * <p>
- * Example JSON:
+ * The primary data comes from {@code GET /api/overall}, which returns:
  * <pre>
  * {
- *   "discordId": "1155804161418461205",
- *   "minecraftUsername": "sanatanisam",
- *   "region": "AS",
- *   "ranks": { "Sword": "HT3", "NethOP": "HT3" },
- *   "overallPoints": 44,
- *   "overallTier": "Novice"
+ *   "rank": 1,
+ *   "ign": "SomePlayer",
+ *   "points": 810,
+ *   "best_tier": "HT1",
+ *   "title": "Combat Grandmaster",
+ *   "region": "NA",
+ *   "total_gamemodes": 9,
+ *   "skin_url": "...",
+ *   "retired": false
  * }
  * </pre>
- * The {@code ranks} map is keyed by gamemode (e.g. {@code "Sword"}) with a tier
- * string value (e.g. {@code "HT3"}).
+ * The older portal fields (discordId, ranks, overallPoints, overallTier) are
+ * kept for backward compatibility but are no longer populated by default.
  */
 public class PlayerRanking {
-    public String discordId;
-    public String minecraftUsername;
-    public String region;
-    public Map<String, String> ranks = new HashMap<>();
-    public int overallPoints;
-    public String overallTier;
 
-    /** Returns the raw tier string (e.g. "HT3") for the given gamemode, or null. */
+    // ---------- New PojavTiers fields ----------
+    public String bestTier;      // from "best_tier"
+    public int points;           // from "points"
+    public String region;        // from "region" (already existed, but now mapped from "region" in JSON)
+
+    // ---------- Legacy fields (may be null/0/empty) ----------
+    public String discordId;              // not provided by /api/overall
+    public String minecraftUsername;      // still populated from "ign" → minecraftUsername
+    public Map<String, String> ranks = new HashMap<>(); // per-gamemode tiers (empty with /api/overall)
+    public int overallPoints;            // kept for old code, will be 0
+    public String overallTier;           // kept for old code, will be null
+
+    /**
+     * Returns the raw tier string (e.g. "HT3") for the given gamemode, or
+     * {@code null} if not ranked in that mode. Because the current overall API
+     * does not include per‑gamemode data, this will always return null unless
+     * you manually populate the {@code ranks} map via {@code /api/tiers/<ign>}.
+     */
     public String getTier(GameMode mode) {
         if (ranks == null || mode == null) return null;
         // direct key first
@@ -43,6 +57,7 @@ public class PlayerRanking {
         return null;
     }
 
+    /** Returns {@code true} if the player has any per‑gamemode tier data. */
     public boolean hasAnyTier() {
         return ranks != null && !ranks.isEmpty();
     }
