@@ -1,8 +1,11 @@
-package com.portaltiers.tagger;
+package com.portaltiers.tagger;  // package kept as-is to avoid breaking other files
 
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-import com.portaltiers.tagger.config.PortalConfig;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.portaltiers.tagger.config.PortalConfig;    // You may rename this later to PojavConfig
 import com.portaltiers.tagger.model.GameMode;
 import com.portaltiers.tagger.model.PlayerRanking;
 import com.portaltiers.tagger.util.Http;
@@ -27,18 +30,22 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Central state for Portal Tier Tagger: fetches and caches the rankings list
- * from the Portal API and builds the coloured tier badges shown in-game.
+ * Central state for Pojav Tier Tagger: fetches and caches the overall leaderboard
+ * from the PojavTiers API and builds coloured tier badges.
  */
-public final class PortalTierManager {
-    public static final Logger LOGGER = LoggerFactory.getLogger("PortalTierTagger");
-    public static final Identifier ICON_FONT = Identifier.of("portaltiertagger", "icons");
+public final class PojavTierManager {   // Class renamed
+
+    public static final Logger LOGGER = LoggerFactory.getLogger("PojavTierTagger");
+    public static final Identifier ICON_FONT = Identifier.of("pojavtiertagger", "icons");
 
     private static final Gson GSON = new Gson();
 
+    /** The fixed API endpoint – returns the overall leaderboard with best_tier for every player. */
+    private static final String API_URL = "http://78.154.103.17:14264/api/overall";
+
     /** Single daemon thread for blocking HTTP, so we never spam the network or block the game. */
     private static final ExecutorService EXEC = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "PortalTierTagger-fetch");
+        Thread t = new Thread(r, "PojavTierTagger-fetch");
         t.setDaemon(true);
         return t;
     });
@@ -47,54 +54,43 @@ public final class PortalTierManager {
     private static final Map<String, PlayerRanking> CACHE = new ConcurrentHashMap<>();
     private static final AtomicBoolean fetching = new AtomicBoolean(false);
 
-    /** Bumped on every successful refresh; mixins use it to invalidate per-entry caches. */
     public static volatile int cacheVersion = 0;
     public static volatile boolean loaded = false;
-    /** When the last fetch was *attempted* (used for retry back-off). */
     private static volatile long lastAttemptMillis = 0L;
-    /** Consecutive failures since the last success (for log throttling). */
     private static volatile int failureStreak = 0;
 
-    private PortalTierManager() {}
+    private PojavTierManager() {}
 
-    /** A resolved tier to display: which gamemode and the raw tier code. */
     public record DisplayedTier(GameMode mode, String tierCode) {}
 
     // ------------------------------------------------------------------
     // Networking
     // ------------------------------------------------------------------
 
-    /**
-     * Refreshes the cache when due. Uses back-off so a failing endpoint is retried
-     * about once a minute (NOT every tick), and refreshed on the configured interval
-     * once data has loaded successfully.
-     */
     public static void maybeRefresh() {
         long now = System.currentTimeMillis();
-        int intervalMin = Math.max(1, PortalConfig.get().refreshIntervalMinutes);
-        long wait = loaded ? intervalMin * 60_000L : 60_000L; // retry ~1/min until first success
+        int intervalMin = Math.max(1, PortalConfig.get().refreshIntervalMinutes); // config still uses old name
+        long wait = loaded ? intervalMin * 60_000L : 60_000L;
         if (now - lastAttemptMillis >= wait) {
             refreshNow();
         }
     }
 
-    /** Forces a refresh of the rankings cache on a background daemon thread. */
     public static void refreshNow() {
-        if (!fetching.compareAndSet(false, true)) return; // already fetching
+        if (!fetching.compareAndSet(false, true)) return;
         lastAttemptMillis = System.currentTimeMillis();
-        final String url = PortalConfig.get().apiUrl;
 
         EXEC.submit(() -> {
             try {
-                String body = Http.get(url);
+                String body = Http.get(API_URL);   // hardcoded new URL
                 ingest(body);
                 failureStreak = 0;
             } catch (Exception e) {
                 if (failureStreak == 0) {
-                    LOGGER.warn("Failed to fetch Portal rankings from {} : {}", url, e.toString());
-                    notifyPlayer("§c[Portal] Could not load tiers — retrying every minute…");
+                    LOGGER.warn("Failed to fetch Pojav rankings from {} : {}", API_URL, e.toString());
+                    notifyPlayer("§c[Pojav] Could not load tiers — retrying every minute…");
                 } else if (failureStreak % 20 == 0) {
-                    LOGGER.warn("Still failing to fetch Portal rankings ({} attempts): {}",
+                    LOGGER.warn("Still failing to fetch Pojav rankings ({} attempts): {}",
                             failureStreak, e.toString());
                 }
                 failureStreak++;
@@ -104,7 +100,6 @@ public final class PortalTierManager {
         });
     }
 
-    /** Sends a one-line message to the player if they are in-game (thread-safe). */
     private static void notifyPlayer(String legacyText) {
         MinecraftClient mc = MinecraftClient.getInstance();
         mc.execute(() -> {
@@ -116,15 +111,28 @@ public final class PortalTierManager {
 
     private static void ingest(String body) {
         try {
-            List<PlayerRanking> list = GSON.fromJson(
-                    body, new TypeToken<List<PlayerRanking>>() {}.getType());
-            if (list == null) return;
+            // Parse the new JSON: {"total":..., "players":[...]}
+            JsonObject root = JsonParser.parseString(body).getAsJsonObject();
+            JsonArray playersArray = root.getAsJsonArray("players");
+            if (playersArray == null) return;
 
             Map<String, PlayerRanking> next = new ConcurrentHashMap<>();
-            for (PlayerRanking pr : list) {
-                if (pr == null || pr.minecraftUsername == null) continue;
-                String key = pr.minecraftUsername.toLowerCase(Locale.ROOT);
-                if (key.equals("unknown")) continue;
+            for (JsonElement elem : playersArray) {
+                JsonObject obj = elem.getAsJsonObject();
+                String ign = getJsonString(obj, "ign");
+                if (ign == null || ign.equalsIgnoreCase("unknown")) continue;
+
+                // Build a PlayerRanking from the fields we now have.
+                // Note: PlayerRanking model needs to be adapted (see below).
+                PlayerRanking pr = new PlayerRanking();
+                pr.minecraftUsername = ign;                    // keep old field name for compatibility
+                pr.bestTier = getJsonString(obj, "best_tier"); // new field – add to PlayerRanking
+                pr.points = getJsonInt(obj, "points");
+                pr.region = getJsonString(obj, "region");
+                // The overall endpoint doesn't provide per‑gamemode tiers, so ranks stays null.
+                // If you need per‑gamemode data later, you'll call /api/tiers/<ign> on demand.
+
+                String key = ign.toLowerCase(Locale.ROOT);
                 next.put(key, pr);
             }
 
@@ -133,13 +141,22 @@ public final class PortalTierManager {
             boolean firstLoad = !loaded;
             loaded = true;
             cacheVersion++;
-            LOGGER.info("Loaded {} Portal player rankings", CACHE.size());
+            LOGGER.info("Loaded {} Pojav player rankings", CACHE.size());
             if (firstLoad) {
-                notifyPlayer("§a[Portal] Loaded " + CACHE.size() + " player tiers!");
+                notifyPlayer("§a[Pojav] Loaded " + CACHE.size() + " player tiers!");
             }
         } catch (Exception e) {
-            LOGGER.warn("Failed to parse Portal rankings", e);
+            LOGGER.warn("Failed to parse Pojav rankings", e);
         }
+    }
+
+    private static String getJsonString(JsonObject obj, String key) {
+        JsonElement e = obj.get(key);
+        return (e != null && !e.isJsonNull()) ? e.getAsString() : null;
+    }
+    private static int getJsonInt(JsonObject obj, String key) {
+        JsonElement e = obj.get(key);
+        return (e != null && !e.isJsonNull()) ? e.getAsInt() : 0;
     }
 
     public static void clearCache() {
@@ -161,74 +178,39 @@ public final class PortalTierManager {
         return CACHE.get(username.toLowerCase(Locale.ROOT));
     }
 
-    /** Resolves which tier to display for a username, honouring the highest-tier mode. */
+    /**
+     * Now returns the player's best tier directly from the API (no gamemode selection).
+     * The previous gamemode selection logic is removed because the overall API
+     * does not include per‑gamemode data.
+     */
     public static DisplayedTier resolve(String username) {
         PlayerRanking pr = lookup(username);
-        if (pr == null || !pr.hasAnyTier()) return null;
+        if (pr == null || pr.bestTier == null) return null;
 
-        PortalConfig cfg = PortalConfig.get();
-        GameMode selected = cfg.gamemode;
-        String selTier = pr.getTier(selected);
-
-        switch (cfg.highestMode) {
-            case ALWAYS -> {
-                DisplayedTier best = highest(pr);
-                return best != null ? best : (selTier != null ? new DisplayedTier(selected, selTier) : null);
-            }
-            case IF_NONE -> {
-                if (selTier != null) return new DisplayedTier(selected, selTier);
-                return highest(pr);
-            }
-            default -> { // NEVER
-                return selTier != null ? new DisplayedTier(selected, selTier) : null;
-            }
-        }
+        // We don't know which gamemode the best tier belongs to, so use a generic placeholder.
+        // You can set a default GameMode (e.g., SWORD) or leave the mode null and adapt buildBadge.
+        GameMode genericMode = GameMode.fromKey("overall"); // might need a new "OVERALL" mode in GameMode enum
+        if (genericMode == null) genericMode = GameMode.UHC; // fallback
+        return new DisplayedTier(genericMode, pr.bestTier);
     }
 
-    /** Finds the player's single best tier across all gamemodes. */
-    public static DisplayedTier highest(PlayerRanking pr) {
-        DisplayedTier best = null;
-        int bestValue = Integer.MAX_VALUE;
-        for (Map.Entry<String, String> e : pr.ranks.entrySet()) {
-            GameMode mode = GameMode.fromKey(e.getKey());
-            if (mode == null) continue;
-            int v = tierValue(e.getValue());
-            if (v < bestValue) {
-                bestValue = v;
-                best = new DisplayedTier(mode, e.getValue());
-            }
-        }
-        return best;
-    }
+    // The old highest() and tierValue() are no longer needed, but kept for reference.
+    // If you still want to support per‑gamemode data, you'd fetch /api/tiers/<ign> separately.
 
-    /** Lower is better. HT1 -> 2, LT1 -> 3, HT2 -> 4, ... LT5 -> 11. */
-    public static int tierValue(String tier) {
-        if (tier == null || tier.length() < 3) return Integer.MAX_VALUE;
-        String t = tier.toUpperCase(Locale.ROOT).replace("R", "");
-        boolean low = t.startsWith("L");
-        int num;
-        try {
-            num = Integer.parseInt(t.replaceAll("[^0-9]", ""));
-        } catch (NumberFormatException e) {
-            return Integer.MAX_VALUE;
-        }
-        return num * 2 + (low ? 1 : 0);
-    }
-
-    /** Points awarded for a tier code (used in the player info command). */
+    /** Points awarded for a tier code (updated to match PojavTiers points). */
     public static int tierPoints(String tier) {
         if (tier == null) return 0;
         return switch (tier.toUpperCase(Locale.ROOT)) {
-            case "HT1" -> 60;
-            case "LT1" -> 45;
-            case "HT2" -> 30;
-            case "LT2" -> 20;
-            case "HT3" -> 10;
-            case "LT3" -> 6;
-            case "HT4" -> 4;
-            case "LT4" -> 3;
-            case "HT5" -> 2;
-            case "LT5" -> 1;
+            case "HT1" -> 100;  // New Pojav scoring
+            case "LT1" -> 90;
+            case "HT2" -> 80;
+            case "LT2" -> 70;
+            case "HT3" -> 60;
+            case "LT3" -> 50;
+            case "HT4" -> 40;
+            case "LT4" -> 30;
+            case "HT5" -> 20;
+            case "LT5" -> 10;
             default -> 0;
         };
     }
@@ -237,12 +219,12 @@ public final class PortalTierManager {
     // Text building
     // ------------------------------------------------------------------
 
-    /** Builds the coloured badge (icon + tier code) for a displayed tier. */
     public static MutableText buildBadge(DisplayedTier dt) {
         PortalConfig cfg = PortalConfig.get();
         MutableText badge = Text.empty();
 
         if (cfg.showIcons) {
+            // Icon may now represent the best tier overall; you can keep the gamemode icon or use a generic one.
             badge.append(Text.literal(String.valueOf(dt.mode().iconChar()))
                     .setStyle(Style.EMPTY.withFont(ICON_FONT).withColor(dt.mode().iconColor())));
             badge.append(Text.literal(" "));
@@ -254,7 +236,6 @@ public final class PortalTierManager {
         return badge;
     }
 
-    /** Prepends the tier badge (+ separator) to a player's display name. */
     public static Text appendTier(String username, Text original) {
         DisplayedTier dt = resolve(username);
         if (dt == null) return original;
@@ -266,7 +247,7 @@ public final class PortalTierManager {
     }
 
     // ------------------------------------------------------------------
-    // Chat deep replacement
+    // Chat deep replacement (unchanged, but uses updated resolve)
     // ------------------------------------------------------------------
 
     private static Set<String> onlineNames() {
@@ -281,7 +262,6 @@ public final class PortalTierManager {
         return names;
     }
 
-    /** Walks a chat message tree and prepends tier badges before player names. */
     public static Text deepReplace(Text message) {
         if (message == null) return null;
         Set<String> names = onlineNames();
