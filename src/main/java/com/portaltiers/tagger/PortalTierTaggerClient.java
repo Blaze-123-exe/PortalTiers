@@ -16,6 +16,7 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import org.lwjgl.glfw.GLFW;
@@ -139,7 +140,8 @@ public class PortalTierTaggerClient implements ClientModInitializer {
             return Text.literal("[Pojav] No data for " + name + " (try /pojavtier refresh)")
                     .formatted(Formatting.RED);
         }
-        Text text = Text.literal("=== Pojav tiers for " + pr.minecraftUsername + " ===")
+        // FIX: Use MutableText so we can append
+        MutableText text = Text.literal("=== Pojav tiers for " + pr.minecraftUsername + " ===")
                 .formatted(Formatting.GOLD);
         if (pr.bestTier != null) {
             int color = PortalConfig.get().getTierColor(pr.bestTier);
